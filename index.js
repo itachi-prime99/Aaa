@@ -1,43 +1,58 @@
-const express = require("express");
-const multer = require("multer");
-const FormData = require("form-data");
-const axios = require("axios");
-const fs = require("fs");
+const express = require('express');
+const axios = require('axios');
+const multer = require('multer');
+const path = require('path');
 
+// Set up express app
 const app = express();
 const port = process.env.PORT || 3000;
 
-const upload = multer({ dest: "uploads/" });
+// Middleware to handle file uploads
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
 
-app.get("/", (req, res) => {
-  res.send("Welcome to Eren's Catbox Uploader API!");
-});
+// Base API URL (update with your base API or the correct path)
+const apiBaseUrl = 'https://raw.githubusercontent.com/itachi-prime99/Aaa/main/Apis.json';
 
-app.post("/upload", upload.single("file"), async (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: "No file uploaded." });
+// Function to get the base API URL
+const csbApi = async () => {
+  try {
+    const base = await axios.get(apiBaseUrl);
+    return base.data.csb; // assuming the Catbox URL is stored here
+  } catch (error) {
+    console.error('Error fetching base API:', error);
+    throw new Error('Could not fetch base API.');
   }
+};
 
-  const form = new FormData();
-  form.append("reqtype", "fileupload");
-  form.append("userhash", "bb55eaffb7479ed3486dd8e4c"); // Use your own hash
-  form.append("fileToUpload", fs.createReadStream(req.file.path));
+// POST route to upload image/video to Catbox
+app.post('/upload', upload.single('file'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).send('No file uploaded.');
+  }
 
   try {
-    const response = await axios.post("https://catbox.moe/user/api.php", form, {
-      headers: form.getHeaders(),
+    const baseApi = await csbApi(); // Fetch the API URL
+
+    // Constructing the request to upload to Catbox
+    const formData = new FormData();
+    formData.append('file', req.file.buffer, { filename: req.file.originalname });
+
+    const response = await axios.post(baseApi, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
     });
 
-    // Delete temp file
-    fs.unlinkSync(req.file.path);
-
-    return res.json({ url: response.data });
+    // Returning the uploaded file's URL
+    res.json({ url: response.data.url });
   } catch (error) {
-    console.error("Upload failed:", error.message);
-    return res.status(500).json({ error: "Failed to upload to Catbox." });
+    console.error('Error uploading to Catbox:', error);
+    res.status(500).send('An error occurred while uploading to Catbox.');
   }
 });
 
+// Start the server
 app.listen(port, () => {
-  console.log(`Catbox API running on port ${port}`);
+  console.log(`Server is running on http://localhost:${port}`);
 });
