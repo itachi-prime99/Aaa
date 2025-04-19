@@ -1,51 +1,44 @@
-import express from 'express';
-import multer from 'multer';
-import axios from 'axios';
-import FormData from 'form-data';
-import fs from 'fs';
-import path from 'path';
+const express = require('express');
+const multer = require('multer');
+const axios = require('axios');
+const path = require('path');
 
+// Initialize Express app
 const app = express();
-const upload = multer({ dest: 'uploads/' });
+const port = 3000;
 
-// Home route
-app.get('/', (req, res) => {
-  res.send('✅ Catbox Upload API is Running!');
-});
+// Setup Multer for file handling
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
 
-// Upload route
+// Upload route for files
 app.post('/upload', upload.single('file'), async (req, res) => {
-  const filePath = req.file.path;
-  const fileName = req.file.originalname;
-
-  const form = new FormData();
-  form.append('reqtype', 'fileupload');
-  form.append('userhash', 'bb55eaffb7479ed3486dd8e4c'); // Your catbox userhash
-  form.append('fileToUpload', fs.createReadStream(filePath), fileName);
+  if (!req.file) {
+    return res.status(400).send('No file uploaded.');
+  }
 
   try {
-    const response = await axios.post('https://catbox.moe/user/api.php', form, {
-      headers: form.getHeaders()
+    // Sending the file to Catbox
+    const formData = new FormData();
+    formData.append('file', req.file.buffer, req.file.originalname);
+
+    const response = await axios.post('https://catbox.moe/user/api.php', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
     });
 
-    // Delete temp file
-    fs.unlinkSync(filePath);
+    // Extract file URL from Catbox API response
+    const fileUrl = response.data.url;
+    res.json({ url: fileUrl });
 
-    res.json({
-      status: 'success',
-      link: response.data
-    });
-  } catch (err) {
-    console.error("Upload error:", err.message);
-    res.status(500).json({
-      status: 'error',
-      message: '❌ Failed to upload to Catbox.'
-    });
+  } catch (error) {
+    console.error('Error uploading file:', error);
+    res.status(500).send('Error uploading to Catbox. Please try again later.');
   }
 });
 
-// Start server
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`✅ Server is running on port ${PORT}`);
+// Start the server
+app.listen(port, () => {
+  console.log(`Server is running on http://localhost:${port}`);
 });
